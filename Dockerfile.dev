@@ -1,0 +1,4 @@
+FROM haproxy:latest
+
+COPY haproxy.cfg          /usr/local/etc/haproxy/haproxy.cfg
+COPY ip-whitelist.dev.txt /usr/local/etc/haproxy/ip-whitelist.txt

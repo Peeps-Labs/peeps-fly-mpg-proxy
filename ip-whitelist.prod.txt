@@ -1,0 +1,7 @@
+# IP allowlist for peeps-fly-mpg-proxy-prod (HAProxy ACL src match).
+#
+# Trigger.dev Cloud static egress (region: us-east-1, AWS N. Virginia).
+# Source: Trigger.dev dashboard → Regions tab (paid feature, see
+# https://trigger.dev/changelog/static-ips). A single /26 covers all
+# 64 possible Trigger egress IPs in this region.
+5.60.65.64/26
