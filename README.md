@@ -15,7 +15,7 @@ This is the Peeps Labs fork of `fly-apps/fly-mpg-proxy`. It exists so that Peeps
 | Fly app | MPG cluster | Cluster ID | Region | Trigger.dev env that uses it |
 |---|---|---|---|---|
 | `peeps-fly-mpg-proxy-dev` | `peeps-db-dev` | `q49ypo4wmkpr17ln` | `lax` | Staging (= `dev.peepsai.com`) |
-| `peeps-fly-mpg-proxy-prod` | `peeps-db` | `1zvn90kjmevrkpew` | `lax` | Production (= `app.peepsai.com`) |
+| `peeps-fly-mpg-proxy` | `peeps-db` | `1zvn90kjmevrkpew` | `lax` | Production (= `app.peepsai.com`) |
 
 Trigger.dev's **Development** environment runs on developer laptops and uses local Docker Postgres — it does NOT traverse this proxy.
 
@@ -28,15 +28,24 @@ Trigger.dev's **Development** environment runs on developer laptops and uses loc
 
 ### Deploying
 
-Both apps must already exist (`fly apps create peeps-fly-mpg-proxy-{dev,prod} -o peeps-labs-inc`) and have `CLUSTER_ID` set as a Fly secret.
+Both apps must already exist:
+
+```sh
+fly apps create peeps-fly-mpg-proxy-dev -o peeps-labs-inc
+fly apps create peeps-fly-mpg-proxy     -o peeps-labs-inc
+```
+
+…and have `CLUSTER_ID` set as a Fly secret. Then:
 
 ```sh
 # Dev
 fly deploy -c fly.dev.toml -a peeps-fly-mpg-proxy-dev
 
 # Prod
-fly deploy -c fly.prod.toml -a peeps-fly-mpg-proxy-prod
+fly deploy -c fly.prod.toml -a peeps-fly-mpg-proxy
 ```
+
+Naming convention matches the parent peeps repo: prod gets the bare name, dev gets the `-dev` suffix (mirrors `peeps` / `peeps-dev`).
 
 ### Trigger.dev DATABASE_URL
 
@@ -44,7 +53,7 @@ Use proxy port `5432` (direct), not `6432` (pooler). Peeps' tasks use `postgres.
 
 ```
 postgresql://peeps_trigger_dev:<PW>@peeps-fly-mpg-proxy-dev.fly.dev:5432/<DB>?sslmode=require
-postgresql://peeps_trigger_prod:<PW>@peeps-fly-mpg-proxy-prod.fly.dev:5432/<DB>?sslmode=require
+postgresql://peeps_trigger_prod:<PW>@peeps-fly-mpg-proxy.fly.dev:5432/<DB>?sslmode=require
 ```
 
 DB user passwords live in the Peeps Labs 1Password vault under `peeps_trigger_dev (Fly MPG)` and `peeps_trigger_prod (Fly MPG)`.
@@ -52,7 +61,7 @@ DB user passwords live in the Peeps Labs 1Password vault under `peeps_trigger_de
 ### Updating the IP allowlist
 
 1. Edit the relevant `ip-whitelist.{dev,prod}.txt`.
-2. Re-deploy that env (`fly deploy -c fly.{dev,prod}.toml -a peeps-fly-mpg-proxy-{dev,prod}`).
+2. Re-deploy that env (`fly deploy -c fly.dev.toml -a peeps-fly-mpg-proxy-dev` or `fly deploy -c fly.prod.toml -a peeps-fly-mpg-proxy`).
 
 The whitelist is baked into the image; there's no live reload.
 
