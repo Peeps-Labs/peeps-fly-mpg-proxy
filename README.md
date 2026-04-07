@@ -4,6 +4,72 @@ Fly MPG Proxy enables you to connect to [Fly Managed Postgres](https://fly.io/do
 
 [Fly Managed Postgres](https://fly.io/docs/mpg/) can only be connected to by machines on the Fly Network, or by clients using [flyctl](https://fly.io/docs/flyctl/).  Fly MPG Proxy changes that by providing a reverse proxy that can be accessed over the Internet and is managed just like any other Fly app.
 
+---
+
+## Peeps fork notes
+
+This is the Peeps Labs fork of `fly-apps/fly-mpg-proxy`. It exists so that Peeps' Trigger.dev Cloud workers (which run outside the Fly network) can reach our Fly Managed Postgres clusters.
+
+### App → cluster mapping
+
+| Fly app | MPG cluster | Cluster ID | Region | Trigger.dev env that uses it |
+|---|---|---|---|---|
+| `peeps-fly-mpg-proxy-dev` | `peeps-db-dev` | `q49ypo4wmkpr17ln` | `lax` | Staging (= `dev.peepsai.com`) |
+| `peeps-fly-mpg-proxy-prod` | `peeps-db` | `1zvn90kjmevrkpew` | `lax` | Production (= `app.peepsai.com`) |
+
+Trigger.dev's **Development** environment runs on developer laptops and uses local Docker Postgres — it does NOT traverse this proxy.
+
+### File layout
+
+- `fly.dev.toml` / `fly.prod.toml` — per-env Fly app configs.
+- `Dockerfile.dev` / `Dockerfile.prod` — per-env Dockerfiles. They differ only in which `ip-whitelist.*.txt` file is `COPY`'d into the image. The whitelist is baked at build time, so deploys are how you change it.
+- `ip-whitelist.dev.txt` / `ip-whitelist.prod.txt` — HAProxy ACL source files. Currently both contain the Trigger.dev us-east-1 static egress CIDR (`5.60.65.64/26`).
+- `haproxy.cfg` — unchanged from upstream. Routes proxy `:5432` → `direct.$CLUSTER_ID.flympg.net` (direct, prepared-statement-safe) and proxy `:6432` → `pgbouncer.$CLUSTER_ID.flympg.net:5432` (pooler).
+
+### Deploying
+
+Both apps must already exist (`fly apps create peeps-fly-mpg-proxy-{dev,prod} -o peeps-labs-inc`) and have `CLUSTER_ID` set as a Fly secret.
+
+```sh
+# Dev
+fly deploy -c fly.dev.toml -a peeps-fly-mpg-proxy-dev
+
+# Prod
+fly deploy -c fly.prod.toml -a peeps-fly-mpg-proxy-prod
+```
+
+### Trigger.dev DATABASE_URL
+
+Use proxy port `5432` (direct), not `6432` (pooler). Peeps' tasks use `postgres.js` with prepared statements, which break under transaction-mode pgbouncer pooling. The pooler port is exposed as a fallback.
+
+```
+postgresql://peeps_trigger_dev:<PW>@peeps-fly-mpg-proxy-dev.fly.dev:5432/<DB>?sslmode=require
+postgresql://peeps_trigger_prod:<PW>@peeps-fly-mpg-proxy-prod.fly.dev:5432/<DB>?sslmode=require
+```
+
+DB user passwords live in the Peeps Labs 1Password vault under `peeps_trigger_dev (Fly MPG)` and `peeps_trigger_prod (Fly MPG)`.
+
+### Updating the IP allowlist
+
+1. Edit the relevant `ip-whitelist.{dev,prod}.txt`.
+2. Re-deploy that env (`fly deploy -c fly.{dev,prod}.toml -a peeps-fly-mpg-proxy-{dev,prod}`).
+
+The whitelist is baked into the image; there's no live reload.
+
+### Syncing from upstream
+
+Upstream (`fly-apps/fly-mpg-proxy`) is mostly dormant. Sync manually when needed:
+
+```sh
+git remote add upstream https://github.com/fly-apps/fly-mpg-proxy.git  # one time
+git fetch upstream
+git log --oneline HEAD..upstream/main
+git diff HEAD..upstream/main
+# Cherry-pick or merge selectively if anything looks relevant.
+```
+
+---
+
 ## How to install Fly MPG Proxy
 
 Installing Fly MPG Proxy is as easy as installing any other app on Fly!
