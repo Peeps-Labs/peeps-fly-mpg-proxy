@@ -1,4 +1,4 @@
-app = 'peeps-fly-mpg-proxy-prod'
+app = 'peeps-fly-mpg-proxy'
 primary_region = 'lax'
 
 [build]
