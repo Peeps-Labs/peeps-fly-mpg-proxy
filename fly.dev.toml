@@ -4,9 +4,9 @@ primary_region = 'lax'
 [build]
   dockerfile = 'Dockerfile.dev'
 
-[http_service]
-  internal_port = 7000
-  force_https = true
+# No [http_service] — the HAProxy stats endpoint on :7000 stays available
+# inside the container for debugging (via `fly ssh console` + curl), but
+# isn't routed to the public Fly edge. This is a TCP-proxy-only app.
 
 [[services]]
   protocol = 'tcp'
