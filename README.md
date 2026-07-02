@@ -35,7 +35,24 @@ fly apps create peeps-fly-mpg-proxy-dev -o peeps-labs-inc
 fly apps create peeps-fly-mpg-proxy     -o peeps-labs-inc
 ```
 
-…and have `CLUSTER_ID` set as a Fly secret. Then:
+…and have `CLUSTER_ID` set as a Fly secret.
+
+Each app also needs a **dedicated IPv4** allocated. These are raw-TCP apps (no
+`[http_service]`), so Fly's shared IPv4 can't route ports 5432/6432 — a dedicated IPv4 is
+required, and it's what makes the `.fly.dev` hostname resolve in public DNS:
+
+```sh
+fly ips allocate-v4 -a peeps-fly-mpg-proxy-dev
+fly ips allocate-v4 -a peeps-fly-mpg-proxy
+```
+
+> ⚠️ IPs are a separate Fly resource from the app — they are **not** restored by
+> `fly deploy`. If an app is ever destroyed and recreated, you must re-run
+> `fly ips allocate-v4`, or Trigger.dev tasks fail with
+> `getaddrinfo ENOTFOUND peeps-fly-mpg-proxy-*.fly.dev` (the hostname has no DNS record
+> until an IP exists). Verify with `fly ips list -a <app>`.
+
+Then deploy:
 
 ```sh
 # Dev
@@ -76,6 +93,29 @@ git log --oneline HEAD..upstream/main
 git diff HEAD..upstream/main
 # Cherry-pick or merge selectively if anything looks relevant.
 ```
+
+### Troubleshooting
+
+**Trigger.dev runs fail with `getaddrinfo ENOTFOUND peeps-fly-mpg-proxy…fly.dev`**
+
+The app has no allocated IP, so its `.fly.dev` hostname has no public DNS record and the
+lookup fails before any connection is attempted. This is the usual aftermath of the app
+being destroyed and recreated — `fly deploy` restores machines, config, and secrets, but
+**not** IPs.
+
+```sh
+fly ips list -a peeps-fly-mpg-proxy-dev   # empty output = the problem
+fly ips allocate-v4 -a peeps-fly-mpg-proxy-dev
+```
+
+DNS propagates within a minute; no redeploy needed. Confirm with
+`dig +short A peeps-fly-mpg-proxy-dev.fly.dev @1.1.1.1`.
+
+**DNS resolves but connections are refused / time out**
+
+Different symptom, different cause: check the HAProxy source-IP allowlist
+(`ip-whitelist.{dev,prod}.txt`) against Trigger.dev's current static egress CIDR. If
+Trigger's egress changed, update the whitelist and redeploy (it's baked into the image).
 
 ---
 
