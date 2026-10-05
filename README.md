@@ -16,22 +16,24 @@ This is the Peeps Labs fork of `fly-apps/fly-mpg-proxy`. It exists so that Peeps
 |---|---|---|---|---|
 | `peeps-fly-mpg-proxy-dev` | `peeps-db-dev` | `q49ypo4wmkpr17ln` | `lax` | Staging (= `dev.peepsai.com`) |
 | `peeps-fly-mpg-proxy` | `peeps-db` | `1zvn90kjmevrkpew` | `lax` | Production (= `app.peepsai.com`) |
+| `peeps-fly-mpg-proxy-rc` | rc cluster (`peeps-rc`'s database) | `3x9jv02ld36o6qp7` | `lax` | The environment reporting to Sentry as `rc` |
 
 Trigger.dev's **Development** environment runs on developer laptops and uses local Docker Postgres — it does NOT traverse this proxy.
 
 ### File layout
 
-- `fly.dev.toml` / `fly.prod.toml` — per-env Fly app configs.
-- `Dockerfile.dev` / `Dockerfile.prod` — per-env Dockerfiles. They differ only in which `ip-whitelist.*.txt` file is `COPY`'d into the image. The whitelist is baked at build time, so deploys are how you change it.
-- `ip-whitelist.dev.txt` / `ip-whitelist.prod.txt` — HAProxy ACL source files. Currently both contain the Trigger.dev us-east-1 static egress CIDR (`5.60.65.64/26`).
+- `fly.dev.toml` / `fly.rc.toml` / `fly.prod.toml` — per-env Fly app configs.
+- `Dockerfile.dev` / `Dockerfile.rc` / `Dockerfile.prod` — per-env Dockerfiles. They differ only in which `ip-whitelist.*.txt` file is `COPY`'d into the image. The whitelist is baked at build time, so deploys are how you change it.
+- `ip-whitelist.dev.txt` / `ip-whitelist.rc.txt` / `ip-whitelist.prod.txt` — HAProxy ACL source files. Currently all three contain the Trigger.dev us-east-1 static egress CIDR (`5.60.65.64/26`).
 - `haproxy.cfg` — unchanged from upstream. Routes proxy `:5432` → `direct.$CLUSTER_ID.flympg.net` (direct, prepared-statement-safe) and proxy `:6432` → `pgbouncer.$CLUSTER_ID.flympg.net:5432` (pooler).
 
 ### Deploying
 
-Both apps must already exist:
+Each app must already exist:
 
 ```sh
 fly apps create peeps-fly-mpg-proxy-dev -o peeps-labs-inc
+fly apps create peeps-fly-mpg-proxy-rc  -o peeps-labs-inc
 fly apps create peeps-fly-mpg-proxy     -o peeps-labs-inc
 ```
 
@@ -43,6 +45,7 @@ required, and it's what makes the `.fly.dev` hostname resolve in public DNS:
 
 ```sh
 fly ips allocate-v4 -a peeps-fly-mpg-proxy-dev
+fly ips allocate-v4 -a peeps-fly-mpg-proxy-rc
 fly ips allocate-v4 -a peeps-fly-mpg-proxy
 ```
 
@@ -58,11 +61,14 @@ Then deploy:
 # Dev
 fly deploy -c fly.dev.toml -a peeps-fly-mpg-proxy-dev
 
+# rc
+fly deploy -c fly.rc.toml -a peeps-fly-mpg-proxy-rc
+
 # Prod
 fly deploy -c fly.prod.toml -a peeps-fly-mpg-proxy
 ```
 
-Naming convention matches the parent peeps repo: prod gets the bare name, dev gets the `-dev` suffix (mirrors `peeps` / `peeps-dev`).
+Naming convention matches the parent peeps repo: prod gets the bare name, dev and rc get a suffix (mirrors `peeps` / `peeps-dev` / `peeps-rc`).
 
 ### Trigger.dev DATABASE_URL
 
@@ -70,6 +76,7 @@ Use proxy port `5432` (direct), not `6432` (pooler). Peeps' tasks use `postgres.
 
 ```
 postgresql://peeps_trigger_dev:<PW>@peeps-fly-mpg-proxy-dev.fly.dev:5432/<DB>?sslmode=require
+postgresql://<USER>:<PW>@peeps-fly-mpg-proxy-rc.fly.dev:5432/<DB>?sslmode=require
 postgresql://peeps_trigger_prod:<PW>@peeps-fly-mpg-proxy.fly.dev:5432/<DB>?sslmode=require
 ```
 
@@ -77,8 +84,8 @@ DB user passwords live in the Peeps Labs 1Password vault under `peeps_trigger_de
 
 ### Updating the IP allowlist
 
-1. Edit the relevant `ip-whitelist.{dev,prod}.txt`.
-2. Re-deploy that env (`fly deploy -c fly.dev.toml -a peeps-fly-mpg-proxy-dev` or `fly deploy -c fly.prod.toml -a peeps-fly-mpg-proxy`).
+1. Edit the relevant `ip-whitelist.{dev,rc,prod}.txt`.
+2. Re-deploy that env (`fly deploy -c fly.<env>.toml -a <app>`, as under Deploying).
 
 The whitelist is baked into the image; there's no live reload.
 
@@ -111,10 +118,17 @@ fly ips allocate-v4 -a peeps-fly-mpg-proxy-dev
 DNS propagates within a minute; no redeploy needed. Confirm with
 `dig +short A peeps-fly-mpg-proxy-dev.fly.dev @1.1.1.1`.
 
+**Trigger.dev runs fail with `getaddrinfo ENOTFOUND pgbouncer.<cluster-id>.flympg.net` (or `direct.…`)**
+
+That environment's `DATABASE_URL` points straight at the MPG cluster. `*.flympg.net`
+names resolve only on the Fly network, so Trigger.dev Cloud can never reach them. Point
+`DATABASE_URL` at that cluster's proxy app instead, on port `5432` (see Trigger.dev
+DATABASE_URL above). If the cluster has no proxy app yet, add one per Deploying.
+
 **DNS resolves but connections are refused / time out**
 
 Different symptom, different cause: check the HAProxy source-IP allowlist
-(`ip-whitelist.{dev,prod}.txt`) against Trigger.dev's current static egress CIDR. If
+(`ip-whitelist.{dev,rc,prod}.txt`) against Trigger.dev's current static egress CIDR. If
 Trigger's egress changed, update the whitelist and redeploy (it's baked into the image).
 
 ---

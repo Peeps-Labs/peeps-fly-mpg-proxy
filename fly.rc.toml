@@ -1,0 +1,30 @@
+app = 'peeps-fly-mpg-proxy-rc'
+primary_region = 'lax'
+
+[build]
+  dockerfile = 'Dockerfile.rc'
+
+# No [http_service] — the HAProxy stats endpoint on :7000 stays available
+# inside the container for debugging (via `fly ssh console` + curl), but
+# isn't routed to the public Fly edge. This is a TCP-proxy-only app.
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 5432
+
+  [[services.ports]]
+    port = 5432
+    handlers = ['proxy_proto']
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 6432
+
+  [[services.ports]]
+    port = 6432
+    handlers = ['proxy_proto']
+
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1
