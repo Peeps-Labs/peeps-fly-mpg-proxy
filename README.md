@@ -75,12 +75,14 @@ Naming convention matches the parent peeps repo: prod gets the bare name, dev an
 Use proxy port `5432` (direct), not `6432` (pooler). Peeps' tasks use `postgres.js` with prepared statements, which break under transaction-mode pgbouncer pooling. The pooler port is exposed as a fallback.
 
 ```
-postgresql://peeps_trigger_dev:<PW>@peeps-fly-mpg-proxy-dev.fly.dev:5432/<DB>?sslmode=require
-postgresql://<USER>:<PW>@peeps-fly-mpg-proxy-rc.fly.dev:5432/<DB>?sslmode=require
-postgresql://peeps_trigger_prod:<PW>@peeps-fly-mpg-proxy.fly.dev:5432/<DB>?sslmode=require
+postgresql://peeps_trigger_dev:<PW>@peeps-fly-mpg-proxy-dev.fly.dev:5432/<DB>
+postgresql://peeps-trigger-rc:<PW>@peeps-fly-mpg-proxy-rc.fly.dev:5432/peeps-rc
+postgresql://peeps_trigger_prod:<PW>@peeps-fly-mpg-proxy.fly.dev:5432/<DB>
 ```
 
-DB user passwords live in the Peeps Labs 1Password vault under `peeps_trigger_dev (Fly MPG)` and `peeps_trigger_prod (Fly MPG)`.
+**Don't add `?sslmode=require`.** Fly MPG routes a TLS connection by its server name (SNI), and postgres.js sends the URL's host, which is the proxy, so the handshake is dropped (`Client network socket disconnected before secure TLS connection was established`). rc was down for this reason until 2026-10-09. To use TLS through the proxy, also set `DATABASE_TLS_SERVERNAME=direct.<CLUSTER_ID>.flympg.net` in that Trigger.dev environment (peeps PR #2054). postgres.js then sends the real host as SNI and verifies the certificate against it, and the proxy passes TLS through untouched.
+
+DB user passwords live in the Peeps Labs 1Password vault under `peeps_trigger_dev (Fly MPG)`, `peeps-trigger-rc (Fly MPG)` and `peeps_trigger_prod (Fly MPG)`.
 
 ### Updating the IP allowlist
 
